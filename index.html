@@ -1,0 +1,378 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+
+  <link rel="stylesheet"
+  href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <title>CampusSignal AI</title>
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #f4f7fb;
+      color: #17243b;
+    }
+
+    header {
+      background: #102b46;
+      color: white;
+      padding: 22px 7%;
+    }
+
+    header h1 { margin: 0 0 7px; }
+    header p { margin: 0; color: #d2e2f2; }
+
+    main {
+      max-width: 1050px;
+      margin: 28px auto;
+      padding: 0 18px;
+    }
+
+    .notice {
+      background: #fff4d6;
+      border: 1px solid #f0d58b;
+      padding: 13px;
+      border-radius: 10px;
+      line-height: 1.5;
+    }
+
+    .panel {
+      background: white;
+      padding: 22px;
+      border-radius: 15px;
+      margin: 18px 0;
+      box-shadow: 0 4px 18px #142a4210;
+    }
+
+    select, input, textarea, button {
+      width: 100%;
+      padding: 12px;
+      margin-top: 8px;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      font: inherit;
+    }
+
+    button {
+      background: #1768d2;
+      color: white;
+      border: 0;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    button:hover { background: #1053ad; }
+
+    .map {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .spot {
+      padding: 17px;
+      border-radius: 12px;
+      border: 1px solid #dce4ef;
+      background: #f9fbff;
+    }
+
+    .good { border-left: 5px solid #23945d; }
+    .medium { border-left: 5px solid #d9a21b; }
+    .weak { border-left: 5px solid #d94848; }
+
+    .status { font-weight: bold; }
+    .good .status { color: #187546; }
+    .medium .status { color: #956700; }
+    .weak .status { color: #b42323; }
+
+    .small { color: #64748b; font-size: 13px; }
+    .report { border-top: 1px solid #e2e8f0; padding: 12px 0; }
+    footer { text-align: center; padding: 25px; color: #64748b; }
+
+    @media (max-width: 600px) {
+      .map { grid-template-columns: 1fr; }
+      header { padding: 20px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>📶 CampusSignal AI</h1>
+    <p>Find and share mobile connectivity information on campus.</p>
+  </header>
+
+  <main>
+    <div class="notice">
+      <strong>Demo prototype:</strong> The initial locations and
+      signal ratings below are fictional examples, not live network
+      measurements. Always verify connectivity before relying on it.
+    </div>
+
+    <section class="panel">
+      <h2>📍 Campus Signal Explorer</h2>
+      <div id="map" style="height: 350px;"></div>
+      <label for="operator">Choose a mobile operator</label>
+      <select id="operator">
+        <option value="All">All operators</option>
+        <option value="Airtel">Airtel (demo data)</option>
+        <option value="Jio">Jio (demo data)</option>
+        <option value="Vi">Vi (demo data)</option>
+      </select>
+
+      <div class="map" id="locations"></div>
+    </section>
+
+    <section class="panel">
+      <h2>📝 Report a Signal Problem</h2>
+      <form id="reportForm">
+        <label for="place">Campus location</label>
+        <input id="place" placeholder="e.g. Library entrance"
+          required maxlength="80">
+
+        <label for="network">Mobile operator</label>
+        <select id="network">
+          <option>Airtel</option>
+          <option>Jio</option>
+          <option>Vi</option>
+        </select>
+
+        <label for="quality">Signal quality</label>
+        <select id="quality">
+          <option value="Good">Good</option>
+          <option value="Moderate">Moderate</option>
+          <option value="Weak">Weak</option>
+        </select>
+
+        <label for="notes">Additional details (optional)</label>
+        <textarea id="notes" maxlength="250"
+          placeholder="e.g. Calls frequently disconnect"></textarea>
+
+        <button type="submit">Submit Signal Report</button>
+      </form>
+      <p id="feedback" role="status" aria-live="polite"></p>
+    </section>
+
+    <section class="panel">
+      <h2>📋 Student Reports</h2>
+      <p class="small">
+        Reports submitted in this browser session.
+        These reports are not sent to a server.
+      </p>
+      <div id="reports">
+        <p>No student reports yet. Add your first report above.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer>CampusSignal AI · Student connectivity project</footer>
+  
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+
+  <script>
+    // Fictional data for learning. Not actual coverage data.
+    const locations = [
+      { place: "Library", operator: "Airtel", quality: "Good" },
+      { place: "Main Block", operator: "Jio", quality: "Moderate" },
+      { place: "Basement Lab", operator: "Airtel", quality: "Weak" },
+      { place: "Sports Ground", operator: "Vi", quality: "Good" },
+      { place: "Hostel", operator: "Jio", quality: "Weak" },
+      { place: "Canteen", operator: "Vi", quality: "Moderate" }
+    ];
+
+    const reports = [];
+    const operator = document.getElementById("operator");
+    const locationsBox = document.getElementById("locations");
+    const reportsBox = document.getElementById("reports");
+    const feedback = document.getElementById("feedback");
+
+    function showLocations() {
+      const selected = operator.value;
+      locationsBox.replaceChildren();
+
+      const filtered = locations.filter(item =>
+        selected === "All" || item.operator === selected
+      );
+
+      filtered.forEach(item => {
+        const card = document.createElement("article");
+        const qualityClass = {
+          Good: "good",
+          Moderate: "medium",
+          Weak: "weak"
+        }[item.quality];
+
+        card.className = "spot " + qualityClass;
+
+        const name = document.createElement("h3");
+        name.textContent = "📍 " + item.place;
+
+        const status = document.createElement("p");
+        status.className = "status";
+        status.textContent = item.quality + " signal (demo)";
+
+        const network = document.createElement("p");
+        network.textContent = "Operator: " + item.operator;
+
+        card.append(name, status, network);
+        locationsBox.appendChild(card);
+      });
+    }
+
+    function showReports() {
+      reportsBox.replaceChildren();
+
+      if (reports.length === 0) {
+        const empty = document.createElement("p");
+        empty.textContent = "No student reports yet.";
+        reportsBox.appendChild(empty);
+        return;
+      }
+
+      reports.slice().reverse().forEach(report => {
+        const item = document.createElement("div");
+        item.className = "report";
+
+        const heading = document.createElement("strong");
+        heading.textContent = report.place + " — " + report.quality;
+
+        const details = document.createElement("p");
+        details.textContent = report.operator + " · " + report.notes;
+
+        item.append(heading, details);
+        reportsBox.appendChild(item);
+      });
+    }
+
+    operator.addEventListener("change", showLocations);
+
+    document.getElementById("reportForm")
+      .addEventListener("submit", event => {
+        event.preventDefault();
+
+const reportQuality = document.getElementById("quality").value;
+
+let suggestion = "";
+
+if (reportQuality === "Weak") {
+  suggestion = "Try moving to an open area or near a window. You can also toggle Airplane Mode and check again.";
+} else if (reportQuality === "Moderate") {
+  suggestion = "Try moving to a more open area and check whether the signal improves.";
+} else {
+  suggestion = "Signal is reported as good at this location. Keep this spot as a possible option.";
+}
+
+        reports.push({
+          place: document.getElementById("place").value.trim(),
+          operator: document.getElementById("network").value,
+          quality: document.getElementById("quality").value,
+          notes: (document.getElementById("notes").value.trim() || "No additional details") + " | Suggested solution: " + suggestion
+        });
+
+        showReports();
+        feedback.textContent = "Report added to this session!";
+        event.target.reset();
+      });
+
+const map = L.map("map").setView(
+  [11.061, 77.0338],
+  16
+);
+
+L.tileLayer(
+  "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+  {
+    maxZoom: 19,
+    attribution: "&copy; OpenStreetMap contributors"
+  }
+).addTo(map);
+
+L.marker([11.061, 77.0338])
+  .addTo(map)
+  .bindPopup("<b>Dr. N.G.P. Institute of Technology</b>");
+
+const demoSpots = [
+  {
+    name: "Demo Library Area",
+    lat: 11.0615,
+    lng: 77.0335,
+    quality: "Good",
+    operator: "Airtel"
+  },
+  {
+    name: "Demo Main Block Area",
+    lat: 11.0620,
+    lng: 77.0340,
+    quality: "Moderate",
+    operator: "Jio"
+  },
+  {
+    name: "Demo Canteen Area",
+    lat: 11.0607,
+    lng: 77.0343,
+    quality: "Weak",
+    operator: "Airtel"
+
+  }
+];
+
+
+const markerLayer = L.layerGroup().addTo(map);
+
+function showMapMarkers() {
+  markerLayer.clearLayers();
+
+  const selectedOperator = operator.value;
+
+  const filteredSpots = demoSpots.filter(spot =>
+    selectedOperator === "All" ||
+    spot.operator === selectedOperator
+  );
+
+  filteredSpots.forEach(spot => {
+    let zoneColor;
+
+    if (spot.quality === "Good") {
+      zoneColor = "#16a34a"; // Green
+    } else if (spot.quality === "Moderate") {
+      zoneColor = "#f59e0b"; // Orange
+    } else {
+      zoneColor = "#dc2626"; // Red
+    }
+
+    L.circle([spot.lat, spot.lng], {
+      radius: 80,
+      color: zoneColor,
+      fillColor: zoneColor,
+      fillOpacity: 0.4,
+      weight: 2
+    })
+      .addTo(markerLayer)
+      .bindPopup(
+        `<b>${spot.name}</b><br>` +
+        `Operator: ${spot.operator}<br>` +
+        `Signal: ${spot.quality}<br>` +
+        `Demo zone — not yet measured`
+      );
+  });
+}
+
+
+
+operator.addEventListener("change", showMapMarkers);
+showMapMarkers();
+
+
+    showLocations();
+    showReports();
+  </script>
+</body>
+</html>
